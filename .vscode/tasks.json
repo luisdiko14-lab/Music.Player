@@ -1,0 +1,15 @@
+{
+	"version": "2.0.0",
+	"tasks": [
+		{
+			"label": "Run Music.Player",
+			"type": "shell",
+			"command": "python3",
+			"args": [
+				"music_player.py"
+			],
+			"isBackground": true,
+			"problemMatcher": []
+		}
+	]
+}

@@ -1,0 +1,154 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta name="theme-color" content="#151a16">
+    <title>Music.Player</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=DM+Mono:wght@400;500&family=Space+Grotesk:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="/styles.css">
+    <script src="/app.js" defer></script>
+  </head>
+  <body>
+    <div class="app-frame">
+      <header class="topbar">
+        <a class="brand" href="#library" aria-label="Music.Player home">
+          <span class="brand-mark" aria-hidden="true">M<span>/</span>P</span>
+          <span class="brand-name">music<span>.</span>player</span>
+        </a>
+        <div class="server-status"><span class="status-light"></span><span id="server-label">LOCAL PLAYER</span><span class="status-divider"></span><span id="port-label">READY</span></div>
+        <button class="inspector-toggle" id="inspector-toggle" type="button" aria-pressed="false">File inspector</button>
+      </header>
+
+      <div class="layout">
+        <aside class="sidebar" aria-label="Library navigation">
+          <div class="side-heading">YOUR SPACE</div>
+          <nav class="nav-list" aria-label="Views">
+            <button class="nav-item active" type="button" data-view="library" aria-current="page"><span class="nav-glyph">01</span>Library</button>
+            <button class="nav-item" type="button" data-view="radio"><span class="nav-glyph">02</span>Online radio</button>
+            <button class="nav-item" type="button" data-view="drive"><span class="nav-glyph">03</span>Drive player</button>
+            <button class="nav-item" type="button" data-view="youtube"><span class="nav-glyph">04</span>YouTube</button>
+          </nav>
+
+          <div class="side-rule"></div>
+          <div class="library-heading"><span class="side-heading">ON THIS DEVICE</span><span class="count-pill" id="track-count">0</span></div>
+          <div class="library-note" id="library-note">Scanning for audio files…</div>
+          <button class="text-action" id="import-files" type="button">＋ Upload files</button>
+          <progress id="upload-progress" max="100" value="0" hidden aria-label="Upload progress"></progress>
+          <input id="file-picker" class="visually-hidden" type="file" multiple accept="audio/*,video/*,.aac,.aif,.aiff,.cue,.flac,.lrc,.m4a,.mka,.mkv,.mov,.mp3,.mp4,.oga,.ogg,.opus,.txt,.md,.json,.wav,.webm,.wma">
+
+          <div class="sidebar-bottom">
+            <div class="format-caption">READ-ONLY FILE VIEWER</div>
+            <p>Audio, video, and lyric files stay on your device.</p>
+          </div>
+        </aside>
+
+        <main class="main-content">
+          <section class="view-panel" id="view-library">
+            <div class="page-heading">
+              <div>
+                <p class="eyebrow">A LITTLE ROOM FOR SOUND</p>
+                <h1>Your library<span class="heading-period">.</span></h1>
+              </div>
+              <label class="search-field"><span class="search-symbol" aria-hidden="true">/</span><span class="visually-hidden">Filter tracks</span><input id="track-search" type="search" placeholder="Find a track" autocomplete="off"></label>
+            </div>
+
+            <section class="now-playing" aria-label="Now playing">
+              <div class="now-copy">
+                <div class="now-kicker"><span class="live-dot"></span><span id="playback-status">READY WHEN YOU ARE</span></div>
+                <div class="track-title" id="current-title">Choose a track</div>
+                <div class="track-subtitle" id="current-subtitle">Your next favorite is already here.</div>
+                <div class="transport-row">
+                  <button class="transport small-control" id="shuffle-button" type="button" aria-pressed="false" title="Shuffle">SHUFFLE</button>
+                  <button class="transport" id="previous-button" type="button" aria-label="Previous track" title="Previous">|‹</button>
+                  <button class="play-button" id="play-button" type="button" aria-label="Play">PLAY <span aria-hidden="true">▶</span></button>
+                  <button class="transport" id="next-button" type="button" aria-label="Next track" title="Next">›|</button>
+                  <button class="transport small-control" id="repeat-button" type="button" aria-pressed="false" title="Repeat">REPEAT</button>
+                </div>
+                <div class="timeline">
+                  <span class="time-label" id="elapsed-time">0:00</span>
+                  <input id="seek-slider" type="range" min="0" max="1000" value="0" aria-label="Seek">
+                  <span class="time-label" id="duration-time">0:00</span>
+                </div>
+              </div>
+              <div class="visualizer-wrap">
+                <div class="visualizer-caption"><span>LIVE FREQUENCY</span><span id="visualizer-state">CANVAS / 01</span></div>
+                <canvas id="visualizer" aria-label="Live audio frequency visualization"></canvas>
+                <div class="visualizer-foot"><span>STEREO FIELD</span><span id="track-extension">NO TRACK LOADED</span></div>
+              </div>
+              <audio id="audio-player" preload="metadata"></audio>
+              <video id="video-player" preload="metadata" playsinline controls hidden></video>
+            </section>
+
+            <div class="section-heading">
+              <div><p class="eyebrow">LOCAL COLLECTION</p><h2>All tracks <span id="visible-count">0</span></h2></div>
+              <span class="section-hint">SELECT ONE TO PLAY</span>
+            </div>
+            <div class="track-list-wrap">
+              <div class="track-list-header"><span>TITLE</span><span>FORMAT</span><span>SIZE</span><span></span></div>
+              <ol class="track-list" id="track-list" aria-label="Local tracks"></ol>
+              <div class="empty-state" id="empty-state" hidden>
+                <span class="empty-index">01 / 00</span>
+                <strong>Your library is quiet.</strong>
+                <span>Add a local media file to get started.</span>
+                <button class="outline-button" id="empty-import" type="button">Choose files</button>
+              </div>
+            </div>
+          </section>
+
+          <section class="view-panel alternate-view" id="view-radio" hidden>
+            <div class="page-heading">
+              <div><p class="eyebrow">LIVE FROM EVERYWHERE</p><h1>Online radio<span class="heading-period">.</span></h1></div>
+              <span class="section-hint">RADIO BROWSER DIRECTORY</span>
+            </div>
+            <p class="view-intro">Find independent stations and play their live streams. Streams come from the Radio Browser community directory.</p>
+            <form class="station-search" id="station-form">
+              <label for="station-query">SEARCH BY GENRE OR STATION</label>
+              <div class="station-search-row"><input id="station-query" type="search" placeholder="ambient, jazz, community radio…" autocomplete="off"><select id="station-country" aria-label="Filter stations by country"><option value="DE">Germany</option><option value="">All countries</option></select><button class="outline-button" type="submit">Find stations <span aria-hidden="true">↗</span></button></div>
+            </form>
+            <div class="station-results" id="station-results" aria-live="polite"><p class="quiet-message">Search the directory to discover a live station.</p></div>
+          </section>
+
+          <section class="view-panel alternate-view" id="view-drive" hidden>
+            <div class="page-heading">
+              <div><p class="eyebrow">SHARED FROM YOUR DRIVE</p><h1>Drive player<span class="heading-period">.</span></h1></div>
+              <a class="plain-link" href="https://drive.google.com/file/d/1IAXohQoTjyiJtr2Ui7FZI77iTGIU8EX7/view" target="_blank" rel="noopener noreferrer">Open in Drive ↗</a>
+            </div>
+            <p class="view-intro">Embedded preview for the shared Drive file. Playback depends on the file's Google Drive sharing permissions.</p>
+            <div class="drive-frame"><iframe title="Google Drive media preview" src="https://drive.google.com/file/d/1IAXohQoTjyiJtr2Ui7FZI77iTGIU8EX7/preview" allow="autoplay; fullscreen" allowfullscreen loading="lazy"></iframe></div>
+          </section>
+
+          <section class="view-panel alternate-view" id="view-youtube" hidden>
+            <div class="page-heading">
+              <div><p class="eyebrow">FEATURED VIDEO</p><h1>YouTube track<span class="heading-period">.</span></h1></div>
+              <a class="plain-link" href="https://youtu.be/0mkhdIo2DGw?si=Hxq1dLcdDchHfJ5V" target="_blank" rel="noopener noreferrer">Open on YouTube ↗</a>
+            </div>
+            <p class="view-intro">Embedded playback for the track you shared. Playback and availability follow YouTube's settings.</p>
+            <div class="drive-frame youtube-frame"><iframe title="YouTube music video" src="https://www.youtube-nocookie.com/embed/0mkhdIo2DGw?rel=0" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share" referrerpolicy="strict-origin-when-cross-origin" allowfullscreen loading="lazy"></iframe></div>
+          </section>
+        </main>
+
+        <aside class="inspector" id="inspector-panel" aria-label="Read-only file inspector">
+          <div class="inspector-top"><div><p class="eyebrow">READ ONLY</p><h2>Inspector</h2></div><button class="close-inspector" id="close-inspector" type="button" aria-label="Close file inspector">×</button></div>
+          <div class="inspector-art" aria-hidden="true"><span id="inspector-art-ext">MP3</span><i></i><i></i><i></i><i></i><i></i><i></i><i></i></div>
+          <div class="inspector-file-name" id="inspector-name">No file selected</div>
+          <p class="inspector-file-type" id="inspector-type">Select a track or text file to inspect.</p>
+          <dl class="file-facts">
+            <div><dt>FORMAT</dt><dd id="inspector-format">—</dd></div>
+            <div><dt>FILE SIZE</dt><dd id="inspector-size">—</dd></div>
+            <div><dt>DURATION</dt><dd id="inspector-duration">—</dd></div>
+            <div><dt>MODIFIED</dt><dd id="inspector-modified">—</dd></div>
+          </dl>
+          <div class="inspector-rule"></div>
+          <div class="text-preview-heading"><span>TEXT PREVIEW</span><span>LOCKED</span></div>
+          <textarea id="text-preview" readonly aria-label="Read-only text file preview" placeholder="Choose a .lrc, .cue, .txt, .md, or .json file to preview it here."></textarea>
+          <p class="inspector-footnote">This viewer never writes changes to your files. Binary media is shown as file facts and played in the player.</p>
+        </aside>
+      </div>
+
+      <footer class="bottom-bar"><span>MADE FOR THE MOMENT</span><span id="library-path">LOCAL FILES · READ ONLY</span><span>SPACE TO PLAY / PAUSE</span></footer>
+    </div>
+  </body>
+</html>
