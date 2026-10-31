@@ -5,6 +5,9 @@
 			"label": "Run Music.Player",
 			"type": "shell",
 			"command": "python3",
+			"windows": {
+				"command": "py"
+			},
 			"args": [
 				"music_player.py"
 			],

@@ -19,8 +19,36 @@
           <span class="brand-name">music<span>.</span>player</span>
         </a>
         <div class="server-status"><span class="status-light"></span><span id="server-label">LOCAL PLAYER</span><span class="status-divider"></span><span id="port-label">READY</span></div>
-        <button class="inspector-toggle" id="inspector-toggle" type="button" aria-pressed="false">File inspector</button>
+        <div class="top-actions">
+          <button class="inspector-toggle" id="desktop-tools-toggle" type="button">Desktop tools</button>
+          <button class="inspector-toggle" id="inspector-toggle" type="button" aria-pressed="false">File inspector</button>
+        </div>
       </header>
+
+      <dialog class="player-dialog tools-dialog" id="desktop-tools-dialog" aria-labelledby="desktop-tools-title">
+        <div class="dialog-header"><div><p class="eyebrow">DESKTOP</p><h2 id="desktop-tools-title">Tools</h2></div><button class="dialog-close" type="button" data-close-dialog="desktop-tools-dialog" aria-label="Close tools">×</button></div>
+        <p class="dialog-copy">Native desktop controls for this player.</p>
+        <div class="tool-actions"><button class="outline-button" id="open-task-manager" type="button">Task manager</button><button class="outline-button" id="open-notification-settings" type="button">Notifications</button></div>
+        <p class="dialog-status" id="desktop-tools-status" role="status"></p>
+      </dialog>
+
+      <dialog class="player-dialog task-dialog" id="task-manager-dialog" aria-labelledby="task-manager-title">
+        <div class="dialog-header"><div><p class="eyebrow">MANAGED PROCESSES</p><h2 id="task-manager-title">Task manager</h2></div><button class="dialog-close" type="button" data-close-dialog="task-manager-dialog" aria-label="Close task manager">×</button></div>
+        <p class="dialog-copy">Start an app by name or choose its executable. Only apps started here can be ended.</p>
+        <div class="task-launch-row"><label class="visually-hidden" for="task-app-input">Application name or path</label><input id="task-app-input" type="text" placeholder="App name or executable path"><button class="outline-button" id="task-browse" type="button">Browse</button><button class="play-button" id="task-start" type="button">START</button></div>
+        <div class="task-list-heading"><span>APP</span><span>PID / STATE</span><span></span></div>
+        <div class="managed-task-list" id="managed-task-list" aria-live="polite"></div>
+        <p class="dialog-status" id="task-manager-status" role="status">No managed apps yet.</p>
+      </dialog>
+
+      <dialog class="player-dialog notification-dialog" id="notification-dialog" aria-labelledby="notification-title">
+        <div class="dialog-header"><div><p class="eyebrow">SYSTEM TRAY</p><h2 id="notification-title">Playback notifications</h2></div><button class="dialog-close" type="button" data-close-dialog="notification-dialog" aria-label="Close notification settings">×</button></div>
+        <label class="check-row"><input id="notifications-enabled" type="checkbox"><span>Show a notification when playback starts</span></label>
+        <label class="field-label" for="notification-heading">TITLE</label><input class="dialog-input" id="notification-heading" type="text" maxlength="80">
+        <label class="field-label" for="notification-template">MESSAGE <span>{track} and {app} are supported</span></label><input class="dialog-input" id="notification-template" type="text" maxlength="200">
+        <p class="dialog-status" id="notification-status" role="status"></p>
+        <div class="dialog-actions"><button class="outline-button" id="notification-test" type="button">Test</button><button class="play-button" id="notification-save" type="button">SAVE</button></div>
+      </dialog>
 
       <div class="layout">
         <aside class="sidebar" aria-label="Library navigation">
@@ -66,6 +94,7 @@
                   <button class="play-button" id="play-button" type="button" aria-label="Play">PLAY <span aria-hidden="true">▶</span></button>
                   <button class="transport" id="next-button" type="button" aria-label="Next track" title="Next">›|</button>
                   <button class="transport small-control" id="repeat-button" type="button" aria-pressed="false" title="Repeat">REPEAT</button>
+                  <button class="transport small-control" id="lyrics-toggle" type="button" aria-expanded="false" aria-controls="lyrics-panel">LYRICS</button>
                 </div>
                 <div class="timeline">
                   <span class="time-label" id="elapsed-time">0:00</span>
@@ -80,6 +109,11 @@
               </div>
               <audio id="audio-player" preload="metadata"></audio>
               <video id="video-player" preload="metadata" playsinline controls hidden></video>
+            </section>
+
+            <section class="lyrics-panel" id="lyrics-panel" aria-labelledby="lyrics-heading" hidden>
+              <div class="lyrics-panel-heading"><div><p class="eyebrow">LOCAL LYRICS</p><h2 id="lyrics-heading">Lyrics</h2></div><span class="lyrics-state" id="lyrics-state" role="status">Choose a track</span></div>
+              <div class="lyrics-lines" id="lyrics-lines" aria-live="polite"></div>
             </section>
 
             <div class="section-heading">

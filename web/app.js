@@ -20,6 +20,9 @@ const state = {
   source: null,
   animationFrame: 0,
   inspectorOpen: window.innerWidth > 860,
+  lyrics: [],
+  lyricsRequest: 0,
+  activeLyricIndex: -1,
 };
 
 const mediaExtensions = new Set([
@@ -51,6 +54,105 @@ function formatSize(bytes) {
 function fileExtension(name) {
   const lastDot = name.lastIndexOf(".");
   return lastDot < 0 ? "" : name.slice(lastDot).toLowerCase();
+}
+
+function parseLyrics(raw) {
+  const entries = [];
+  const timestampPattern = /\[(\d+):(\d{2})(?:\.(\d{1,3}))?\]/g;
+  for (const line of raw.split(/\r?\n/)) {
+    const timestamps = [...line.matchAll(timestampPattern)];
+    const text = line
+      .replace(timestampPattern, "")
+      .replace(/^\s*\[[a-z]{2,3}:[^\]]*\]\s*$/i, "")
+      .trim();
+    if (!text) continue;
+    if (!timestamps.length) {
+      entries.push({ time: null, text });
+      continue;
+    }
+    for (const match of timestamps) {
+      const milliseconds = Number((match[3] || "0").padEnd(3, "0"));
+      entries.push({
+        time: Number(match[1]) * 60 + Number(match[2]) + milliseconds / 1000,
+        text,
+      });
+    }
+  }
+  return entries.sort((first, second) => (first.time ?? -1) - (second.time ?? -1));
+}
+
+function displayLyrics(raw, sourceName) {
+  const lines = document.querySelector("#lyrics-lines");
+  const status = document.querySelector("#lyrics-state");
+  state.lyrics = parseLyrics(raw);
+  state.activeLyricIndex = -1;
+  lines.replaceChildren();
+  status.textContent = sourceName;
+  if (!state.lyrics.length) {
+    const empty = document.createElement("p");
+    empty.className = "lyrics-empty";
+    empty.textContent = "The selected lyrics file contains no readable lines.";
+    lines.append(empty);
+    return;
+  }
+  state.lyrics.forEach((entry, index) => {
+    const line = document.createElement("p");
+    line.className = "lyric-line";
+    line.dataset.index = String(index);
+    line.textContent = entry.text;
+    lines.append(line);
+  });
+  updateLyricHighlight(state.activeMedia.currentTime || 0);
+}
+
+function updateLyricHighlight(currentTime) {
+  let activeIndex = -1;
+  for (let index = 0; index < state.lyrics.length; index += 1) {
+    const lyric = state.lyrics[index];
+    if (lyric.time === null) continue;
+    if (lyric.time > currentTime) break;
+    activeIndex = index;
+  }
+  if (activeIndex === state.activeLyricIndex) return;
+  state.activeLyricIndex = activeIndex;
+  const lines = document.querySelectorAll(".lyric-line");
+  lines.forEach((line, index) => {
+    const active = index === activeIndex;
+    line.classList.toggle("active", active);
+    if (active) line.setAttribute("aria-current", "true");
+    else line.removeAttribute("aria-current");
+  });
+  if (activeIndex >= 0 && !document.querySelector("#lyrics-panel").hidden) {
+    lines[activeIndex]?.scrollIntoView({ block: "nearest", behavior: "smooth" });
+  }
+}
+
+async function loadTrackLyrics(track) {
+  const requestId = ++state.lyricsRequest;
+  state.lyrics = [];
+  state.activeLyricIndex = -1;
+  document.querySelector("#lyrics-state").textContent = "Checking for local lyrics…";
+  document.querySelector("#lyrics-lines").replaceChildren();
+  try {
+    const response = await fetch(`/api/lyrics?id=${encodeURIComponent(track.id)}`, { cache: "no-store" });
+    const result = await response.json();
+    if (requestId !== state.lyricsRequest) return;
+    if (!response.ok) throw new Error(result.error || "Lyrics are unavailable.");
+    displayLyrics(result.lyrics, `LOCAL FILE · ${result.name}`);
+  } catch (error) {
+    if (requestId !== state.lyricsRequest) return;
+    document.querySelector("#lyrics-state").textContent = "NO LOCAL MATCH";
+    const empty = document.createElement("p");
+    empty.className = "lyrics-empty";
+    empty.textContent = `${error.message}. Place a matching .lrc file next to the track or choose one with Upload files.`;
+    document.querySelector("#lyrics-lines").replaceChildren(empty);
+  }
+}
+
+function setLyricsPanel(open) {
+  document.querySelector("#lyrics-panel").hidden = !open;
+  document.querySelector("#lyrics-toggle").setAttribute("aria-expanded", String(open));
+  if (open) updateLyricHighlight(state.activeMedia.currentTime || 0);
 }
 
 function setInspector(track) {
@@ -148,6 +250,14 @@ function trackUrl(track) {
   return `/api/media?id=${encodeURIComponent(track.id)}`;
 }
 
+function sendDesktopEvent(event, track) {
+  fetch("/api/desktop-event", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ event, track }),
+  }).catch(() => {});
+}
+
 function selectMediaElement(track) {
   const nextMedia = track.type === "video" ? videoPlayer : audioPlayer;
   const previousMedia = state.activeMedia;
@@ -178,6 +288,7 @@ function playTrack(index) {
   document.querySelector("#elapsed-time").textContent = "0:00";
   document.querySelector("#duration-time").textContent = "0:00";
   renderTracks();
+  loadTrackLyrics(track);
   if (window.innerWidth <= 860) toggleInspector(false);
   player.play().then(ensureAudioGraph).catch(() => {
     document.querySelector("#playback-status").textContent = "READY · PRESS PLAY";
@@ -263,6 +374,14 @@ async function addImportedFiles(files) {
     const extension = fileExtension(file.name);
     if (textExtensions.has(extension)) {
       setInspector({ name: file.name, size: file.size, file, kind: "text" });
+      if (extension === ".lrc") {
+        const requestId = ++state.lyricsRequest;
+        const lyrics = await file.text();
+        if (requestId === state.lyricsRequest) {
+          displayLyrics(lyrics, `LOCAL FILE · ${file.name}`);
+          setLyricsPanel(true);
+        }
+      }
       if (window.innerWidth <= 860) toggleInspector(true);
       continue;
     }
@@ -404,8 +523,160 @@ function playStation(station) {
   document.querySelector("#inspector-modified").textContent = "—";
   document.querySelector("#text-preview").value = "";
   state.currentIndex = -1;
+  state.lyricsRequest += 1;
+  state.lyrics = [];
+  state.activeLyricIndex = -1;
+  document.querySelector("#lyrics-state").textContent = "LIVE STREAM · NO LOCAL LYRICS";
+  const lyricsMessage = document.createElement("p");
+  lyricsMessage.className = "lyrics-empty";
+  lyricsMessage.textContent = "Local LRC lyrics are available for files in your library.";
+  document.querySelector("#lyrics-lines").replaceChildren(lyricsMessage);
   renderTracks();
 }
+
+const taskDialog = document.querySelector("#task-manager-dialog");
+let taskRefreshTimer = 0;
+
+function showDialog(id) {
+  document.querySelector("#desktop-tools-dialog").close();
+  const dialog = document.querySelector(`#${id}`);
+  if (!dialog.open) dialog.showModal();
+}
+
+function setTaskStatus(message) {
+  document.querySelector("#task-manager-status").textContent = message;
+}
+
+async function refreshManagedTasks() {
+  const api = window.pywebview?.api;
+  const list = document.querySelector("#managed-task-list");
+  if (!api) {
+    list.replaceChildren();
+    setTaskStatus("Open this player in the desktop app to manage processes.");
+    return;
+  }
+  try {
+    const tasks = await api.list_tasks();
+    list.replaceChildren();
+    if (!tasks.length) {
+      const empty = document.createElement("div");
+      empty.className = "task-empty";
+      empty.textContent = "No apps started by this manager.";
+      list.append(empty);
+      return;
+    }
+    for (const task of tasks) {
+      const row = document.createElement("div");
+      row.className = "managed-task-row";
+      const name = document.createElement("span");
+      name.className = "managed-task-name";
+      name.textContent = task.name;
+      const status = document.createElement("span");
+      status.className = "managed-task-state";
+      status.textContent = task.running ? `RUNNING · ${task.pid}` : `EXITED · ${task.pid}`;
+      const end = document.createElement("button");
+      end.className = "task-end-button";
+      end.type = "button";
+      end.textContent = "End task";
+      end.disabled = !task.running;
+      end.addEventListener("click", async () => {
+        if (!window.confirm(`End ${task.name}? This only stops an app started from this manager.`)) return;
+        const result = await api.end_task(task.pid);
+        setTaskStatus(result.ok ? `End requested for ${task.name}.` : result.error);
+        await refreshManagedTasks();
+      });
+      row.append(name, status, end);
+      list.append(row);
+    }
+  } catch (error) {
+    setTaskStatus(`Task list unavailable: ${error.message}`);
+  }
+}
+
+async function openTaskManager() {
+  showDialog("task-manager-dialog");
+  await refreshManagedTasks();
+  window.clearInterval(taskRefreshTimer);
+  taskRefreshTimer = window.setInterval(refreshManagedTasks, 1500);
+}
+
+async function openNotificationSettings() {
+  showDialog("notification-dialog");
+  const api = window.pywebview?.api;
+  if (!api) {
+    document.querySelector("#notification-status").textContent = "Open this player in the desktop app to configure notifications.";
+    return;
+  }
+  try {
+    const settings = await api.load_notification_settings();
+    document.querySelector("#notifications-enabled").checked = settings.enabled;
+    document.querySelector("#notification-heading").value = settings.title;
+    document.querySelector("#notification-template").value = settings.message;
+    document.querySelector("#notification-status").textContent = "";
+  } catch (error) {
+    document.querySelector("#notification-status").textContent = `Settings unavailable: ${error.message}`;
+  }
+}
+
+async function browseTaskExecutable() {
+  const api = window.pywebview?.api;
+  if (!api) {
+    setTaskStatus("Browse is available in the desktop app.");
+    return;
+  }
+  const selected = await api.choose_executable();
+  if (selected) document.querySelector("#task-app-input").value = selected;
+}
+
+async function startManagedTask() {
+  const api = window.pywebview?.api;
+  if (!api) {
+    setTaskStatus("Start task is available in the desktop app.");
+    return;
+  }
+  const input = document.querySelector("#task-app-input");
+  const result = await api.start_task(input.value);
+  if (!result.ok) {
+    setTaskStatus(result.error);
+    return;
+  }
+  input.value = "";
+  setTaskStatus(`Started ${result.task.name}.`);
+  await refreshManagedTasks();
+}
+
+async function saveNotificationSettings() {
+  const api = window.pywebview?.api;
+  if (!api) {
+    document.querySelector("#notification-status").textContent = "Settings can only be saved in the desktop app.";
+    return;
+  }
+  const result = await api.save_notification_settings(
+    document.querySelector("#notifications-enabled").checked,
+    document.querySelector("#notification-heading").value,
+    document.querySelector("#notification-template").value,
+  );
+  document.querySelector("#notification-status").textContent = result.ok ? "Notification settings saved." : result.error;
+}
+
+async function testNotificationSettings() {
+  const api = window.pywebview?.api;
+  if (!api) {
+    document.querySelector("#notification-status").textContent = "Test notifications are available in the desktop app.";
+    return;
+  }
+  const result = await api.test_notification(
+    "Sample track",
+    document.querySelector("#notification-heading").value,
+    document.querySelector("#notification-template").value,
+  );
+  document.querySelector("#notification-status").textContent = result.ok
+    ? "Test notification sent."
+    : "Tray notifications are unavailable or disabled.";
+}
+
+window.openTaskManager = openTaskManager;
+window.openNotificationSettings = openNotificationSettings;
 
 function ensureAudioGraph() {
   if (state.activeMedia === streamPlayer) {
@@ -477,6 +748,8 @@ function bindPlayerEvents() {
       if (player === state.activeMedia) {
         document.querySelector("#playback-status").textContent = "NOW PLAYING";
         document.querySelector("#play-button").innerHTML = 'PAUSE <span aria-hidden="true">Ⅱ</span>';
+        const trackName = state.tracks[state.currentIndex]?.name || document.querySelector("#current-title").textContent;
+        sendDesktopEvent(state.currentIndex >= 0 ? "track-started" : "station-started", trackName);
       }
     });
     player.addEventListener("pause", () => {
@@ -490,6 +763,7 @@ function bindPlayerEvents() {
       document.querySelector("#elapsed-time").textContent = formatTime(player.currentTime);
       document.querySelector("#duration-time").textContent = formatTime(player.duration);
       document.querySelector("#seek-slider").value = player.duration ? String(Math.round(player.currentTime / player.duration * 1000)) : "0";
+      updateLyricHighlight(player.currentTime);
       if (state.selectedTrack && state.selectedTrack === state.tracks[state.currentIndex]) {
         state.selectedTrack.duration = player.duration;
         document.querySelector("#inspector-duration").textContent = formatTime(player.duration);
@@ -529,6 +803,23 @@ document.querySelector("#seek-slider").addEventListener("input", (event) => {
 });
 document.querySelector("#inspector-toggle").addEventListener("click", () => toggleInspector());
 document.querySelector("#close-inspector").addEventListener("click", () => toggleInspector(false));
+document.querySelector("#lyrics-toggle").addEventListener("click", () => {
+  setLyricsPanel(document.querySelector("#lyrics-panel").hidden);
+});
+document.querySelector("#desktop-tools-toggle").addEventListener("click", () => document.querySelector("#desktop-tools-dialog").showModal());
+document.querySelector("#open-task-manager").addEventListener("click", openTaskManager);
+document.querySelector("#open-notification-settings").addEventListener("click", openNotificationSettings);
+document.querySelectorAll("[data-close-dialog]").forEach((button) => {
+  button.addEventListener("click", () => document.querySelector(`#${button.dataset.closeDialog}`).close());
+});
+document.querySelector("#task-browse").addEventListener("click", browseTaskExecutable);
+document.querySelector("#task-start").addEventListener("click", startManagedTask);
+document.querySelector("#task-app-input").addEventListener("keydown", (event) => {
+  if (event.key === "Enter") startManagedTask();
+});
+document.querySelector("#task-manager-dialog").addEventListener("close", () => window.clearInterval(taskRefreshTimer));
+document.querySelector("#notification-save").addEventListener("click", saveNotificationSettings);
+document.querySelector("#notification-test").addEventListener("click", testNotificationSettings);
 document.querySelector("#import-files").addEventListener("click", () => document.querySelector("#file-picker").click());
 document.querySelector("#empty-import").addEventListener("click", () => document.querySelector("#file-picker").click());
 document.querySelector("#file-picker").addEventListener("change", (event) => {
