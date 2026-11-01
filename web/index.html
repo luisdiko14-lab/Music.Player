@@ -94,13 +94,23 @@
                   <button class="play-button" id="play-button" type="button" aria-label="Play">PLAY <span aria-hidden="true">▶</span></button>
                   <button class="transport" id="next-button" type="button" aria-label="Next track" title="Next">›|</button>
                   <button class="transport small-control" id="repeat-button" type="button" aria-pressed="false" title="Repeat">REPEAT</button>
-                  <button class="transport small-control" id="lyrics-toggle" type="button" aria-expanded="false" aria-controls="lyrics-panel">LYRICS</button>
                 </div>
                 <div class="timeline">
                   <span class="time-label" id="elapsed-time">0:00</span>
                   <input id="seek-slider" type="range" min="0" max="1000" value="0" aria-label="Seek">
                   <span class="time-label" id="duration-time">0:00</span>
                 </div>
+                <details class="equalizer-panel" id="equalizer-panel">
+                  <summary>Equalizer</summary>
+                  <div class="equalizer-presets"><label for="equalizer-preset">PRESET</label><select id="equalizer-preset"><option value="custom">Custom</option><option value="flat">Flat</option><option value="bass">Bass boost</option><option value="vocal">Vocal</option><option value="treble">Treble</option></select></div>
+                  <div class="equalizer-bands">
+                    <label><span>60 Hz</span><input id="eq-60" type="range" min="-12" max="12" step="1" value="0"><output for="eq-60">0 dB</output></label>
+                    <label><span>250 Hz</span><input id="eq-250" type="range" min="-12" max="12" step="1" value="0"><output for="eq-250">0 dB</output></label>
+                    <label><span>1 kHz</span><input id="eq-1000" type="range" min="-12" max="12" step="1" value="0"><output for="eq-1000">0 dB</output></label>
+                    <label><span>4 kHz</span><input id="eq-4000" type="range" min="-12" max="12" step="1" value="0"><output for="eq-4000">0 dB</output></label>
+                    <label><span>12 kHz</span><input id="eq-12000" type="range" min="-12" max="12" step="1" value="0"><output for="eq-12000">0 dB</output></label>
+                  </div>
+                </details>
               </div>
               <div class="visualizer-wrap">
                 <div class="visualizer-caption"><span>LIVE FREQUENCY</span><span id="visualizer-state">CANVAS / 01</span></div>
@@ -108,20 +118,45 @@
                 <div class="visualizer-foot"><span>STEREO FIELD</span><span id="track-extension">NO TRACK LOADED</span></div>
               </div>
               <audio id="audio-player" preload="metadata"></audio>
+              <audio id="audio-player-next" preload="auto" hidden></audio>
               <video id="video-player" preload="metadata" playsinline controls hidden></video>
             </section>
 
+            <div class="player-secondary-actions"><label class="crossfade-control" for="crossfade-seconds"><span>CROSSFADE</span><select id="crossfade-seconds" aria-label="Crossfade duration"><option value="0">Off</option><option value="2">2 sec</option><option value="4">4 sec</option><option value="6">6 sec</option><option value="8">8 sec</option></select></label><button class="outline-button" id="lyrics-toggle" type="button" aria-expanded="false" aria-controls="lyrics-panel">Show lyrics</button></div>
             <section class="lyrics-panel" id="lyrics-panel" aria-labelledby="lyrics-heading" hidden>
-              <div class="lyrics-panel-heading"><div><p class="eyebrow">LOCAL LYRICS</p><h2 id="lyrics-heading">Lyrics</h2></div><span class="lyrics-state" id="lyrics-state" role="status">Choose a track</span></div>
+              <div class="lyrics-panel-heading"><div><p class="eyebrow">LOCAL LYRICS</p><h2 id="lyrics-heading">Lyrics</h2></div><div class="lyrics-panel-tools"><div class="lyrics-panel-actions"><button class="outline-button" id="lyrics-import" type="button">Open .lrc</button><label class="lyrics-first-line"><input id="lyrics-first-line" type="checkbox"><span>First line only</span></label></div><span class="lyrics-state" id="lyrics-state" role="status">Choose a track</span></div></div>
               <div class="lyrics-lines" id="lyrics-lines" aria-live="polite"></div>
+            </section>
+
+            <section class="local-playlists" aria-labelledby="local-playlists-heading">
+              <div class="section-heading"><div><p class="eyebrow">YOUR COLLECTION</p><h2 id="local-playlists-heading">Playlists <span id="local-playlist-count">0</span></h2></div></div>
+              <div class="playlist-toolbar">
+                <label class="visually-hidden" for="local-playlist-name">New playlist name</label><input id="local-playlist-name" type="text" maxlength="60" placeholder="New playlist name">
+                <button class="outline-button" id="local-playlist-create" type="button">Create</button>
+                <label class="visually-hidden" for="local-playlist-select">Active playlist</label><select id="local-playlist-select" aria-label="Active playlist"><option value="">Select playlist</option></select>
+                <button class="outline-button" id="local-playlist-add-current" type="button">Add current</button>
+                <button class="outline-button" id="local-playlist-delete" type="button">Delete</button>
+              </div>
+              <p class="playlist-status" id="local-playlist-status" role="status">Create a playlist to collect local tracks.</p>
+              <ol class="local-playlist-tracks" id="local-playlist-tracks" aria-label="Playlist tracks"></ol>
+              <div class="backup-actions"><button class="outline-button" id="player-backup-export" type="button">Backup playlists & settings</button><button class="outline-button" id="player-backup-import" type="button">Restore backup</button><input id="player-backup-file" type="file" accept="application/json,.json" hidden></div>
+              <details class="shortcut-panel">
+                <summary>Keyboard shortcuts</summary>
+                <div class="shortcut-grid">
+                  <label for="shortcut-play">PLAY / PAUSE<select id="shortcut-play"><option value="Space">Space</option><option value="KeyK">K</option><option value="KeyL">L</option></select></label>
+                  <label for="shortcut-next">NEXT TRACK<select id="shortcut-next"><option value="ArrowRight">Right arrow</option><option value="KeyN">N</option><option value="KeyJ">J</option></select></label>
+                  <label for="shortcut-previous">PREVIOUS TRACK<select id="shortcut-previous"><option value="ArrowLeft">Left arrow</option><option value="KeyP">P</option><option value="KeyH">H</option></select></label>
+                </div>
+                <p class="playlist-status" id="shortcut-status" role="status">Choose keys for player actions.</p>
+              </details>
             </section>
 
             <div class="section-heading">
               <div><p class="eyebrow">LOCAL COLLECTION</p><h2>All tracks <span id="visible-count">0</span></h2></div>
-              <span class="section-hint">SELECT ONE TO PLAY</span>
+              <div class="collection-actions"><span class="section-hint">SELECT ONE TO PLAY</span><button class="outline-button" id="find-duplicates" type="button">Find duplicates</button></div>
             </div>
             <div class="track-list-wrap">
-              <div class="track-list-header"><span>TITLE</span><span>FORMAT</span><span>SIZE</span><span></span></div>
+              <div class="track-list-header"><span>TITLE</span><span>FORMAT</span><span>SIZE</span><span></span><span></span></div>
               <ol class="track-list" id="track-list" aria-label="Local tracks"></ol>
               <div class="empty-state" id="empty-state" hidden>
                 <span class="empty-index">01 / 00</span>
@@ -130,6 +165,11 @@
                 <button class="outline-button" id="empty-import" type="button">Choose files</button>
               </div>
             </div>
+            <section class="duplicate-panel" id="duplicate-panel" aria-labelledby="duplicate-heading" hidden>
+              <div class="duplicate-heading"><div><p class="eyebrow">CONTENT MATCH</p><h2 id="duplicate-heading">Duplicate files</h2></div><button class="outline-button" id="close-duplicates" type="button">Close</button></div>
+              <p class="duplicate-status" id="duplicate-status" role="status">Hashing local files…</p>
+              <div class="duplicate-results" id="duplicate-results"></div>
+            </section>
           </section>
 
           <section class="view-panel alternate-view" id="view-radio" hidden>
@@ -157,16 +197,37 @@
           <section class="view-panel alternate-view" id="view-youtube" hidden>
             <div class="page-heading">
               <div><p class="eyebrow">FEATURED VIDEO</p><h1>YouTube track<span class="heading-period">.</span></h1></div>
-              <a class="plain-link" href="https://youtu.be/0mkhdIo2DGw?si=Hxq1dLcdDchHfJ5V" target="_blank" rel="noopener noreferrer">Open on YouTube ↗</a>
+              <a class="plain-link" id="youtube-open-link" href="https://youtu.be/0mkhdIo2DGw" target="_blank" rel="noopener noreferrer">Open on YouTube ↗</a>
             </div>
-            <p class="view-intro">Embedded playback for the track you shared. Playback and availability follow YouTube's settings.</p>
-            <div class="drive-frame youtube-frame"><iframe title="YouTube music video" src="https://www.youtube-nocookie.com/embed/0mkhdIo2DGw?rel=0" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share" referrerpolicy="strict-origin-when-cross-origin" allowfullscreen loading="lazy"></iframe></div>
+            <form class="station-search youtube-search" id="youtube-form">
+              <label for="youtube-url">YOUTUBE VIDEO OR PLAYLIST URL</label>
+              <div class="station-search-row"><input id="youtube-url" type="url" placeholder="https://youtu.be/…" autocomplete="url"><button class="outline-button" type="submit">EMBED</button><button class="outline-button" id="youtube-default" type="button">DEFAULT</button></div>
+              <p class="quiet-message youtube-status" id="youtube-status" role="status" aria-live="polite"></p>
+            </form>
+            <div class="youtube-actions">
+              <label class="visually-hidden" for="youtube-favorite-name">Favorite name</label><input id="youtube-favorite-name" type="text" maxlength="80" placeholder="Name this favorite">
+              <label class="visually-hidden" for="youtube-favorite-tag">Favorite tag</label><input id="youtube-favorite-tag" type="text" maxlength="32" placeholder="Tag">
+              <button class="outline-button" id="youtube-save-favorite" type="button">Save favorite</button>
+              <label class="speed-control" for="youtube-playback-speed"><span>SPEED</span><select id="youtube-playback-speed" aria-label="YouTube playback speed"><option value="0.5">0.5×</option><option value="0.75">0.75×</option><option value="1" selected>1×</option><option value="1.25">1.25×</option><option value="1.5">1.5×</option><option value="1.75">1.75×</option><option value="2">2×</option></select></label>
+              <button class="outline-button" id="youtube-pip" type="button" aria-pressed="false">Picture-in-picture</button>
+              <button class="outline-button" id="youtube-theater" type="button" aria-pressed="false">Theater</button>
+              <button class="outline-button" id="youtube-fullscreen" type="button" aria-pressed="false">Full screen</button>
+            </div>
+            <div class="drive-frame youtube-frame" id="youtube-frame"><iframe id="youtube-embed" title="YouTube video player" src="https://www.youtube-nocookie.com/embed/0mkhdIo2DGw?rel=0" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share" referrerpolicy="origin" allowfullscreen loading="lazy"></iframe></div>
+            <section class="youtube-favorites" aria-labelledby="youtube-favorites-heading">
+              <div class="section-heading"><div><p class="eyebrow">YOUR COLLECTION</p><h2 id="youtube-favorites-heading">Saved videos <span id="youtube-favorite-count">0</span></h2></div><div class="favorite-tools"><label class="visually-hidden" for="youtube-favorite-filter">Filter favorites by tag</label><select id="youtube-favorite-filter" aria-label="Filter favorites by tag"><option value="">All tags</option></select><button class="outline-button" id="youtube-export-favorites" type="button">Export</button><button class="outline-button" id="youtube-import-favorites" type="button">Import</button><input id="youtube-favorite-file" type="file" accept="application/json,.json" hidden></div></div>
+              <div class="youtube-favorite-list" id="youtube-favorite-list" aria-live="polite"></div>
+            </section>
+            <section class="youtube-queue" aria-labelledby="youtube-queue-heading">
+              <div class="section-heading"><div><p class="eyebrow">UP NEXT</p><h2 id="youtube-queue-heading">Queue <span id="youtube-queue-count">0</span></h2></div></div>
+              <div class="youtube-queue-list" id="youtube-queue-list" aria-live="polite"></div>
+            </section>
           </section>
         </main>
 
         <aside class="inspector" id="inspector-panel" aria-label="Read-only file inspector">
           <div class="inspector-top"><div><p class="eyebrow">READ ONLY</p><h2>Inspector</h2></div><button class="close-inspector" id="close-inspector" type="button" aria-label="Close file inspector">×</button></div>
-          <div class="inspector-art" aria-hidden="true"><span id="inspector-art-ext">MP3</span><i></i><i></i><i></i><i></i><i></i><i></i><i></i></div>
+          <div class="inspector-art"><img id="album-artwork" alt="Album cover for selected track" hidden><span id="inspector-art-ext" aria-hidden="true">MP3</span><i aria-hidden="true"></i><i aria-hidden="true"></i><i aria-hidden="true"></i><i aria-hidden="true"></i><i aria-hidden="true"></i><i aria-hidden="true"></i><i aria-hidden="true"></i></div>
           <div class="inspector-file-name" id="inspector-name">No file selected</div>
           <p class="inspector-file-type" id="inspector-type">Select a track or text file to inspect.</p>
           <dl class="file-facts">

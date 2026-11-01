@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import argparse
+import hashlib
 import importlib
 import json
 import mimetypes
@@ -16,7 +17,7 @@ from functools import partial
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from urllib.error import URLError
-from urllib.parse import parse_qs, unquote, urlencode, urlsplit
+from urllib.parse import parse_qs, quote, unquote, urlencode, urlsplit
 from urllib.request import Request, urlopen
 import webbrowser
 
@@ -40,6 +41,7 @@ SUPPORTED_MEDIA = {
 }
 MAX_UPLOAD_BYTES = 500 * 1024 * 1024
 MAX_LYRICS_BYTES = 512 * 1024
+MAX_ARTWORK_BYTES = 5 * 1024 * 1024
 MAX_RADIO_RESPONSE_BYTES = 2 * 1024 * 1024
 RADIO_DIRECTORY_HOSTS = (
     "de1.api.radio-browser.info",
@@ -51,6 +53,29 @@ WINDOWS_RESERVED_NAMES = {
     *(f"COM{number}" for number in range(1, 10)),
     *(f"LPT{number}" for number in range(1, 10)),
 }
+WATCHED_SOURCE_EXTENSIONS = {".css", ".html", ".js", ".json", ".md", ".py", ".toml", ".yaml", ".yml"}
+IGNORED_SOURCE_DIRECTORIES = {".git", ".venv", "__pycache__", "build", "dist", "node_modules", "venv"}
+
+
+def source_revision(root: Path) -> str:
+    digest = hashlib.sha256()
+    root = root.resolve()
+    for directory, subdirectories, filenames in os.walk(root, followlinks=False):
+        subdirectories[:] = sorted(
+            name for name in subdirectories
+            if name not in IGNORED_SOURCE_DIRECTORIES and not (Path(directory) / name).is_symlink()
+        )
+        for filename in sorted(filenames):
+            path = Path(directory) / filename
+            if path.suffix.lower() not in WATCHED_SOURCE_EXTENSIONS or path.is_symlink():
+                continue
+            try:
+                stat = path.stat()
+                relative_path = path.relative_to(root).as_posix()
+            except OSError:
+                continue
+            digest.update(f"{relative_path}\0{stat.st_mtime_ns}\0{stat.st_size}\n".encode("utf-8"))
+    return digest.hexdigest()
 
 
 def user_music_root() -> Path:
@@ -85,6 +110,57 @@ def tls_context() -> ssl.SSLContext:
     else:
         return ssl.create_default_context(cafile=certificate_bundle)
     return ssl.create_default_context()
+
+
+def read_embedded_artwork(path: Path) -> tuple[bytes, str] | None:
+    try:
+        mutagen = importlib.import_module("mutagen")
+        audio_file = mutagen.File(str(path), easy=False)
+    except Exception:
+        return None
+    if audio_file is None:
+        return None
+
+    candidates = []
+    tags = getattr(audio_file, "tags", None)
+    if tags:
+        getall = getattr(tags, "getall", None)
+        if callable(getall):
+            try:
+                candidates.extend((frame.data, frame.mime) for frame in getall("APIC"))
+            except Exception:
+                pass
+        try:
+            candidates.extend((bytes(image), None) for image in tags.get("covr", []))
+        except (TypeError, ValueError):
+            pass
+        try:
+            candidates.extend((picture.data, picture.mime) for picture in audio_file.pictures)
+        except (AttributeError, TypeError):
+            pass
+        try:
+            picture_type = importlib.import_module("mutagen.flac").Picture
+            encoded_pictures = tags.get("metadata_block_picture", [])
+            if isinstance(encoded_pictures, str):
+                encoded_pictures = [encoded_pictures]
+            for encoded in encoded_pictures:
+                picture = picture_type(importlib.import_module("base64").b64decode(encoded, validate=True))
+                candidates.append((picture.data, picture.mime))
+        except Exception:
+            pass
+
+    for data, declared_type in candidates:
+        if not isinstance(data, bytes) or not data or len(data) > MAX_ARTWORK_BYTES:
+            continue
+        if data.startswith(b"\xff\xd8\xff"):
+            return data, "image/jpeg"
+        if data.startswith(b"\x89PNG\r\n\x1a\n"):
+            return data, "image/png"
+        if data.startswith((b"GIF87a", b"GIF89a")):
+            return data, "image/gif"
+        if declared_type in {"image/jpeg", "image/png", "image/gif", "image/webp"} and data[:4] == b"RIFF" and data[8:12] == b"WEBP":
+            return data, "image/webp"
+    return None
 
 def application_root() -> Path:
     if getattr(sys, "frozen", False):
@@ -144,12 +220,23 @@ class MusicRequestHandler(BaseHTTPRequestHandler):
         request = urlsplit(self.path)
         if request.path == "/api/tracks":
             self.send_json(self.list_tracks())
+        elif request.path == "/api/dev-version":
+            self.send_json({
+                "enabled": not getattr(sys, "frozen", False),
+                "version": source_revision(self.web_root.parent),
+            })
         elif request.path == "/api/lyrics":
             self.send_lyrics(parse_qs(request.query).get("id", [""])[0])
+        elif request.path == "/api/artwork":
+            self.send_artwork(parse_qs(request.query).get("id", [""])[0])
+        elif request.path == "/api/duplicates":
+            self.send_duplicates()
         elif request.path == "/api/stations":
             self.send_stations(parse_qs(request.query))
         elif request.path == "/api/media":
             self.send_media(parse_qs(request.query).get("id", [""])[0])
+        elif request.path == "/api/download":
+            self.send_media(parse_qs(request.query).get("id", [""])[0], download=True)
         else:
             self.send_static_file(request.path)
 
@@ -281,6 +368,49 @@ class MusicRequestHandler(BaseHTTPRequestHandler):
             return
         self.send_json({"name": sidecar.name, "lyrics": lyrics})
 
+    def send_artwork(self, identifier: str) -> None:
+        try:
+            path = resolve_media_id(self.roots, identifier, SUPPORTED_MEDIA)
+        except (OSError, ValueError):
+            self.send_json({"error": "Media file not found"}, status=404)
+            return
+        artwork = read_embedded_artwork(path)
+        if artwork is None:
+            self.send_json({"error": "No embedded album art found"}, status=404)
+            return
+
+        content, content_type = artwork
+        self.send_response(200)
+        self.send_header("Content-Type", content_type)
+        self.send_header("Content-Length", str(len(content)))
+        self.send_header("Cache-Control", "private, max-age=3600")
+        self.send_header("X-Content-Type-Options", "nosniff")
+        self.end_headers()
+        self.wfile.write(content)
+
+    def send_duplicates(self) -> None:
+        grouped_files = {}
+        for track in self.list_tracks()["tracks"]:
+            try:
+                path = resolve_media_id(self.roots, track["id"], SUPPORTED_MEDIA)
+                stat = path.stat()
+                digest = hashlib.sha256()
+                with path.open("rb") as media_file:
+                    while chunk := media_file.read(1024 * 1024):
+                        digest.update(chunk)
+            except OSError:
+                continue
+            key = (stat.st_size, digest.hexdigest())
+            grouped_files.setdefault(key, []).append(track)
+
+        groups = [
+            {"size": size, "tracks": sorted(files, key=lambda track: track["name"].casefold())}
+            for (size, _digest), files in grouped_files.items()
+            if len(files) > 1
+        ]
+        groups.sort(key=lambda group: group["tracks"][0]["name"].casefold())
+        self.send_json({"groups": groups})
+
     def receive_desktop_event(self) -> None:
         try:
             content_length = int(self.headers.get("Content-Length", "0"))
@@ -346,7 +476,7 @@ class MusicRequestHandler(BaseHTTPRequestHandler):
             status=502,
         )
 
-    def send_media(self, identifier: str) -> None:
+    def send_media(self, identifier: str, download: bool = False) -> None:
         try:
             path = resolve_media_id(self.roots, identifier, SUPPORTED_MEDIA)
             file_size = path.stat().st_size
@@ -385,6 +515,12 @@ class MusicRequestHandler(BaseHTTPRequestHandler):
         self.send_header("Content-Length", str(content_length))
         self.send_header("Accept-Ranges", "bytes")
         self.send_header("X-Content-Type-Options", "nosniff")
+        if download:
+            fallback_name = re.sub(r'[^A-Za-z0-9._ -]', "_", path.name) or "download"
+            self.send_header(
+                "Content-Disposition",
+                f"attachment; filename=\"{fallback_name}\"; filename*=UTF-8''{quote(path.name, safe='')}",
+            )
         if status == 206:
             self.send_header("Content-Range", f"bytes {start}-{end}/{file_size}")
         self.end_headers()
@@ -417,6 +553,7 @@ class MusicRequestHandler(BaseHTTPRequestHandler):
         self.send_response(200)
         self.send_header("Content-Type", content_type)
         self.send_header("Content-Length", str(len(content)))
+        self.send_header("Cache-Control", "no-store")
         self.send_header("X-Content-Type-Options", "nosniff")
         self.end_headers()
         if self.command != "HEAD":
