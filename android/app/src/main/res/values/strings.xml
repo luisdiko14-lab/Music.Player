@@ -1,0 +1,11 @@
+<resources>
+    <string name="app_name">Music.Player</string>
+    <string name="notification_channel_name">Playback</string>
+    <string name="notification_channel_description">Music and playback notifications from Music.Player</string>
+    <string name="default_track_name">Now playing</string>
+    <string name="start_service">Start playback service</string>
+    <string name="stop_service">Stop playback service</string>
+    <string name="toggle_overlay">Toggle pop-up player</string>
+    <string name="request_battery">Allow background playback</string>
+    <string name="request_overlay">Allow pop-up window</string>
+</resources>

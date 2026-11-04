@@ -13,7 +13,7 @@ import re
 import ssl
 import tempfile
 import sys
-from functools import partial
+from functools import lru_cache, partial
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from urllib.error import URLError
@@ -187,6 +187,45 @@ def media_id(root_index: int, relative_path: Path) -> str:
     return f"{root_index}|{relative_path.as_posix()}"
 
 
+@lru_cache(maxsize=4096)
+def cached_track_metadata(path: str, modified_ns: int, size: int) -> dict:
+    del modified_ns, size
+    try:
+        mutagen = importlib.import_module("mutagen")
+        audio_file = mutagen.File(path, easy=True)
+    except Exception:
+        return {}
+    if audio_file is None:
+        return {}
+
+    tags = getattr(audio_file, "tags", None) or {}
+
+    def tag_text(name: str) -> str:
+        value = tags.get(name)
+        if isinstance(value, (list, tuple)):
+            value = value[0] if value else None
+        return str(value).strip() if value is not None else ""
+
+    metadata = {
+        key: tag_text(key)
+        for key in ("title", "artist", "album", "albumartist", "genre", "date")
+    }
+    if metadata["date"]:
+        metadata["year"] = metadata["date"][:4]
+    metadata["replaygainGain"] = ""
+    gain = tag_text("replaygain_track_gain")
+    match = re.fullmatch(r"\s*([+-]?(?:\d+(?:\.\d*)?|\.\d+))\s*dB\s*", gain, re.IGNORECASE)
+    if match:
+        metadata["replaygainGain"] = match.group(1)
+    try:
+        duration = float(audio_file.info.length)
+        if duration > 0:
+            metadata["duration"] = duration
+    except (AttributeError, TypeError, ValueError):
+        pass
+    return metadata
+
+
 def resolve_media_id(roots: list[Path], value: str, extensions: set[str]) -> Path:
     root_number, separator, relative_name = value.partition("|")
     if not separator or not relative_name:
@@ -281,6 +320,7 @@ class MusicRequestHandler(BaseHTTPRequestHandler):
                             "size": stat.st_size,
                             "modified": int(stat.st_mtime),
                             "type": "video" if path.suffix.lower() in {".mkv", ".mov", ".mp4", ".webm"} else "audio",
+                            **cached_track_metadata(str(path), stat.st_mtime_ns, stat.st_size),
                         }
                     )
         tracks.sort(key=lambda track: track["name"].casefold())
@@ -334,6 +374,7 @@ class MusicRequestHandler(BaseHTTPRequestHandler):
                 "size": stat.st_size,
                 "modified": int(stat.st_mtime),
                 "type": "video" if destination.suffix.lower() in {".mkv", ".mov", ".mp4", ".webm"} else "audio",
+                **cached_track_metadata(str(destination), stat.st_mtime_ns, stat.st_size),
             }
             self.send_json({"track": track}, status=201)
         except (OSError, ValueError) as error:
@@ -577,7 +618,7 @@ def parse_arguments() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="Run the Music.Player local web app.")
     parser.add_argument("--host", default="127.0.0.1", help="Interface to bind (default: localhost only)")
     parser.add_argument("--port", type=int, default=0, help="Port to bind; 0 selects a free port")
-    parser.add_argument("--media-dir", type=Path, help="Additional folder to scan for media")
+    parser.add_argument("--media-dir", type=Path, action="append", help="Additional folder to scan for media; may be repeated")
     parser.add_argument("--no-browser", action="store_true", help="Run only the local server, without a desktop window")
     parser.add_argument("--browser", action="store_true", help="Open the player in an external browser instead of the desktop window")
     return parser.parse_args()
@@ -595,12 +636,12 @@ def main() -> None:
     except OSError as error:
         raise SystemExit(f"Could not create music folder {upload_root}: {error}") from error
     roots = [upload_root, *media_roots(root)]
-    if arguments.media_dir:
-        extra_root = arguments.media_dir.expanduser().resolve()
+    for media_dir in arguments.media_dir or []:
+        extra_root = media_dir.expanduser().resolve()
         if not extra_root.is_dir():
             raise SystemExit(f"Media folder does not exist: {extra_root}")
         if extra_root not in roots:
-            roots.insert(1, extra_root)
+            roots.append(extra_root)
 
     web_root = bundled_root() / "web"
     if not (web_root / "index.html").is_file():

@@ -28,7 +28,7 @@
       <dialog class="player-dialog tools-dialog" id="desktop-tools-dialog" aria-labelledby="desktop-tools-title">
         <div class="dialog-header"><div><p class="eyebrow">DESKTOP</p><h2 id="desktop-tools-title">Tools</h2></div><button class="dialog-close" type="button" data-close-dialog="desktop-tools-dialog" aria-label="Close tools">×</button></div>
         <p class="dialog-copy">Native desktop controls for this player.</p>
-        <div class="tool-actions"><button class="outline-button" id="open-task-manager" type="button">Task manager</button><button class="outline-button" id="open-notification-settings" type="button">Notifications</button></div>
+        <div class="tool-actions"><button class="outline-button" id="open-task-manager" type="button">Task manager</button><button class="outline-button" id="open-notification-settings" type="button">Notifications</button><button class="outline-button" id="open-app-folder" type="button">App folder</button><button class="outline-button" id="open-config-folder" type="button">Config folder</button><button class="outline-button" id="focus-player-window" type="button">Bring to front</button></div>
         <p class="dialog-status" id="desktop-tools-status" role="status"></p>
       </dialog>
 
@@ -122,7 +122,8 @@
               <video id="video-player" preload="metadata" playsinline controls hidden></video>
             </section>
 
-            <div class="player-secondary-actions"><label class="crossfade-control" for="crossfade-seconds"><span>CROSSFADE</span><select id="crossfade-seconds" aria-label="Crossfade duration"><option value="0">Off</option><option value="2">2 sec</option><option value="4">4 sec</option><option value="6">6 sec</option><option value="8">8 sec</option></select></label><button class="outline-button" id="lyrics-toggle" type="button" aria-expanded="false" aria-controls="lyrics-panel">Show lyrics</button></div>
+            <div class="player-secondary-actions"><label class="crossfade-control" for="crossfade-seconds"><span>CROSSFADE</span><select id="crossfade-seconds" aria-label="Crossfade duration"><option value="0">Off</option><option value="2">2 sec</option><option value="4">4 sec</option><option value="6">6 sec</option><option value="8">8 sec</option></select></label><label class="normalize-control"><input id="replaygain-enabled" type="checkbox"><span>ReplayGain</span></label><label class="sleep-timer-control" for="sleep-timer-duration"><span>SLEEP</span><select id="sleep-timer-duration" aria-label="Sleep timer"><option value="">Off</option><option value="15">15 min</option><option value="30">30 min</option><option value="45">45 min</option><option value="60">60 min</option><option value="track">End of track</option></select></label><button class="outline-button" id="sleep-timer-start" type="button">Set timer</button><button class="outline-button" id="lyrics-toggle" type="button" aria-expanded="false" aria-controls="lyrics-panel">Show lyrics</button></div>
+            <div class="playback-utility-status"><span id="sleep-timer-status" role="status"></span><button class="outline-button" id="resume-last-track" type="button" hidden>Resume last track</button></div>
             <section class="lyrics-panel" id="lyrics-panel" aria-labelledby="lyrics-heading" hidden>
               <div class="lyrics-panel-heading"><div><p class="eyebrow">LOCAL LYRICS</p><h2 id="lyrics-heading">Lyrics</h2></div><div class="lyrics-panel-tools"><div class="lyrics-panel-actions"><button class="outline-button" id="lyrics-import" type="button">Open .lrc</button><label class="lyrics-first-line"><input id="lyrics-first-line" type="checkbox"><span>First line only</span></label></div><span class="lyrics-state" id="lyrics-state" role="status">Choose a track</span></div></div>
               <div class="lyrics-lines" id="lyrics-lines" aria-live="polite"></div>
@@ -139,7 +140,11 @@
               </div>
               <p class="playlist-status" id="local-playlist-status" role="status">Create a playlist to collect local tracks.</p>
               <ol class="local-playlist-tracks" id="local-playlist-tracks" aria-label="Playlist tracks"></ol>
-              <div class="backup-actions"><button class="outline-button" id="player-backup-export" type="button">Backup playlists & settings</button><button class="outline-button" id="player-backup-import" type="button">Restore backup</button><input id="player-backup-file" type="file" accept="application/json,.json" hidden></div>
+              <div class="queue-heading"><h3>Up next <span id="local-queue-count">0</span></h3><button class="outline-button" id="local-queue-clear" type="button">Clear queue</button></div>
+              <ol class="local-queue-list" id="local-queue-list" aria-label="Local playback queue"></ol>
+              <div class="queue-heading"><h3>Recently played</h3></div>
+              <ol class="recent-track-list" id="recent-track-list" aria-label="Recently played tracks"></ol>
+              <div class="backup-actions"><button class="outline-button" id="player-backup-export" type="button">Backup playlists & settings</button><button class="outline-button" id="player-backup-import" type="button">Restore backup</button><button class="outline-button" id="playlist-m3u-export" type="button">Export M3U</button><button class="outline-button" id="playlist-m3u-import" type="button">Import M3U</button><input id="playlist-m3u-file" type="file" accept="audio/x-mpegurl,audio/mpegurl,.m3u,.m3u8" hidden><input id="player-backup-file" type="file" accept="application/json,.json" hidden></div>
               <details class="shortcut-panel">
                 <summary>Keyboard shortcuts</summary>
                 <div class="shortcut-grid">
@@ -153,10 +158,19 @@
 
             <div class="section-heading">
               <div><p class="eyebrow">LOCAL COLLECTION</p><h2>All tracks <span id="visible-count">0</span></h2></div>
-              <div class="collection-actions"><span class="section-hint">SELECT ONE TO PLAY</span><button class="outline-button" id="find-duplicates" type="button">Find duplicates</button></div>
+              <div class="collection-actions"><span class="section-hint">SELECT ONE TO PLAY</span><button class="outline-button" id="refresh-library" type="button">Rescan</button><button class="outline-button" id="find-duplicates" type="button">Find duplicates</button></div>
+            </div>
+            <div class="library-controls" aria-label="Library filters">
+              <label><span>SORT</span><select id="track-sort"><option value="title">Title</option><option value="artist">Artist</option><option value="album">Album</option><option value="duration">Duration</option><option value="size">File size</option><option value="modified">Recently added</option></select></label>
+              <label><span>ARTIST</span><select id="track-artist-filter"><option value="">All artists</option></select></label>
+              <label><span>ALBUM</span><select id="track-album-filter"><option value="">All albums</option></select></label>
+              <label><span>GENRE</span><select id="track-genre-filter"><option value="">All genres</option></select></label>
+              <label><span>FORMAT</span><select id="track-format-filter"><option value="">All formats</option></select></label>
+              <label><span>DURATION</span><select id="track-duration-filter"><option value="">Any length</option><option value="short">Under 5 min</option><option value="medium">5–30 min</option><option value="long">Over 30 min</option></select></label>
+              <label class="favorites-only"><input id="favorites-only" type="checkbox"><span>Favorites only</span></label>
             </div>
             <div class="track-list-wrap">
-              <div class="track-list-header"><span>TITLE</span><span>FORMAT</span><span>SIZE</span><span></span><span></span></div>
+              <div class="track-list-header"><span>TITLE</span><span>FORMAT</span><span>SIZE</span><span></span><span></span><span></span><span></span></div>
               <ol class="track-list" id="track-list" aria-label="Local tracks"></ol>
               <div class="empty-state" id="empty-state" hidden>
                 <span class="empty-index">01 / 00</span>
@@ -236,6 +250,7 @@
             <div><dt>DURATION</dt><dd id="inspector-duration">—</dd></div>
             <div><dt>MODIFIED</dt><dd id="inspector-modified">—</dd></div>
           </dl>
+          <label class="rating-control" for="track-rating"><span>YOUR RATING</span><select id="track-rating" disabled><option value="0">Not rated</option><option value="1">★</option><option value="2">★★</option><option value="3">★★★</option><option value="4">★★★★</option><option value="5">★★★★★</option></select></label>
           <div class="inspector-rule"></div>
           <div class="text-preview-heading"><span>TEXT PREVIEW</span><span>LOCKED</span></div>
           <textarea id="text-preview" readonly aria-label="Read-only text file preview" placeholder="Choose a .lrc, .cue, .txt, .md, or .json file to preview it here."></textarea>

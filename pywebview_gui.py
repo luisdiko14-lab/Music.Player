@@ -41,6 +41,35 @@ class DesktopAPI:
     def bind_window(self, window) -> None:
         self.window = window
 
+    def show_window(self) -> dict:
+        if self.window is None:
+            return {"ok": False, "error": "The desktop window is not available."}
+        try:
+            self.window.show()
+            if hasattr(self.window, "focus"):
+                self.window.focus()
+            return {"ok": True}
+        except Exception as error:
+            return {"ok": False, "error": str(error)}
+
+    def open_app_folder(self) -> dict:
+        return self.open_path("app")
+
+    def open_config_folder(self) -> dict:
+        return self.open_path("config")
+
+    def open_path(self, target: str) -> dict:
+        folder = Path(__file__).resolve().parent if target == "app" else settings_path().parent
+        try:
+            folder.mkdir(parents=True, exist_ok=True)
+            if os.name == "nt":
+                os.startfile(str(folder))  # type: ignore[attr-defined]
+            else:
+                subprocess.Popen(["xdg-open", str(folder)], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+            return {"ok": True}
+        except Exception as error:
+            return {"ok": False, "error": str(error)}
+
     def choose_executable(self) -> str | None:
         if self.window is None:
             return None

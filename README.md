@@ -26,6 +26,8 @@ Use **Upload files** to copy supported audio or video into your per-user Music.P
 
 The **Online radio** view searches the Radio Browser community directory, defaults to German stations, and can filter across all countries. Search requests use verified HTTPS with a bundled CA certificate set and alternate directory hosts; certificate verification is never disabled. The app does not download radio streams or YouTube videos. The **Drive player** embeds the configured Google Drive file; the file must be shared with permissions that allow preview playback. The **YouTube** view embeds video or playlist links, organizes named favorites with tags, imports/exports favorites as JSON, supports playback speed and picture-in-picture where the runtime allows it, and provides theater/full-screen modes. Queue items can be reordered and advance automatically when the embedded player reports playback complete. The configured default video remains available through the reset button. Error 153 means the embedded runtime did not provide the referrer/client identity YouTube expects; the player passes both `origin` and `widget_referrer`, but WebView2 updates or YouTube's embed settings may still be required.
 
+- [x] Integrate desktop media keys and show the current track in the operating system's media controls.
+
 ## Windows Executable
 
 In GitHub, run **Actions → Build Windows Player → Run workflow**. The workflow builds a one-file Windows executable, uploads a downloadable Actions artifact, and commits `builds/music-player-windows.zip` to the selected branch. The workflow requires permission to write to that branch. The zip contains the executable and a `music/` folder; uploaded tracks are stored in the user's Music.Player data folder.
